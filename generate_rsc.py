@@ -36,23 +36,23 @@ def generate_constraints(joint2edges, joint_pos, edges):
                 hinge_axis = np.cross(v_edge_0, v_edge_1)
                 if np.any(np.isnan(hinge_axis)):
                     hinge_axis = np.array([1,0,0])
-                if np.linalg.norm(hinge_axis) != 0:
+                if np.linalg.norm(hinge_axis) != 0:  
                     hinge_axis /= np.linalg.norm(hinge_axis)
 
                 constraints.append(
-                    hinge_constraint.format(edge_idx[0]+1,
+                    hinge_constraint.format(edge_idx[0] + 1,
                                             anchor[0], anchor[1], anchor[2],
-                                            edge_idx[1]+1,
+                                            edge_idx[1] + 1,
                                             anchor[0], anchor[1], anchor[2],
-                                            hinge_axis[0],hinge_axis[1],hinge_axis[2],
-                                            -hinge_axis[0],-hinge_axis[1],-hinge_axis[2]
+                                            hinge_axis[0], hinge_axis[1], hinge_axis[2],
+                                            -hinge_axis[0], -hinge_axis[1], -hinge_axis[2]
                                             ))
             else:
                 for edge_pair in list(combinations(edge_idx, 2)):
                     constraints.append(
-                        fixed_constraint.format(edge_pair[0]+1,
+                        fixed_constraint.format(edge_pair[0] + 1,
                                                 anchor[0], anchor[1], anchor[2],
-                                                edge_pair[1]+1,
+                                                edge_pair[1] + 1,
                                                 anchor[0], anchor[1], anchor[2]))
         return constraints
 
