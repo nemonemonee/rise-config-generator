@@ -15,8 +15,8 @@ class Robot:
         self.voxels = np.array(filled_vox.matrix).astype(int)
         self.segments = np.zeros_like(self.voxels)
         bounds = self.vox_surface.as_boxes().bounds
-        self.bones = self._update_coords(bones, self.dx, bounds[None , 0])
-        self.joint_positions = self._update_coords(joint_positions, self.dx, bounds[None , 0])
+        self.bones = self._update_coords(bones, self.dx, bounds[None, 0])
+        self.joint_positions = self._update_coords(joint_positions, self.dx, bounds[None, 0])
         self.voxels, self.segments = self.add_bones(self.voxels, self.segments, self.bones, radius)
 
     def load_surface(self, path):

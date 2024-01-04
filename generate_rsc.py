@@ -5,7 +5,7 @@ from templates import *
 from load_robot import Robot
 
 
-def generate_body(voxels, segments, rigid_material=2):
+def generate_body(voxels: object, segments: object, rigid_material: object = 2) -> object:
     input_shape = voxels.shape
     layer_size = input_shape[0] * input_shape[1]
     material_matrix = np.zeros((input_shape[2], layer_size))
@@ -25,36 +25,38 @@ def generate_body(voxels, segments, rigid_material=2):
         is_rigid[k] = is_rigid_layer
     return material_matrix.astype(int), segment_matrix.astype(int), is_rigid.astype(int)
 
-def generate_constraints(joint2edges, joint_pos, edges):
-        constraints = []
-        for joint_idx, edge_idx in joint2edges.items():
-            n_edges = len(edge_idx)
-            anchor = joint_pos[joint_idx]
-            if n_edges == 2:
-                v_edge_0 = np.array(edges[edge_idx[0]][1] - edges[edge_idx[0]][0])
-                v_edge_1 = np.array(edges[edge_idx[1]][1] - edges[edge_idx[1]][0])
-                hinge_axis = np.cross(v_edge_0, v_edge_1)
-                if np.any(np.isnan(hinge_axis)):
-                    hinge_axis = np.array([1,0,0])
-                if np.linalg.norm(hinge_axis) != 0:  
-                    hinge_axis /= np.linalg.norm(hinge_axis)
 
+def generate_constraints(joint2edges, joint_pos, edges):
+    constraints = []
+    for joint_idx, edge_idx in joint2edges.items():
+        n_edges = len(edge_idx)
+        anchor = joint_pos[joint_idx]
+        if n_edges == 2:
+            v_edge_0 = np.array(edges[edge_idx[0]][1] - edges[edge_idx[0]][0])
+            v_edge_1 = np.array(edges[edge_idx[1]][1] - edges[edge_idx[1]][0])
+            hinge_axis = np.cross(v_edge_0, v_edge_1)
+            if np.any(np.isnan(hinge_axis)):
+                hinge_axis = np.array([1, 0, 0])
+            if np.linalg.norm(hinge_axis) != 0:
+                hinge_axis /= np.linalg.norm(hinge_axis)
+
+            constraints.append(
+                hinge_constraint.format(edge_idx[0] + 1,
+                                        anchor[0], anchor[1], anchor[2],
+                                        edge_idx[1] + 1,
+                                        anchor[0], anchor[1], anchor[2],
+                                        hinge_axis[0], hinge_axis[1], hinge_axis[2],
+                                        -hinge_axis[0], -hinge_axis[1], -hinge_axis[2]
+                                        ))
+        else:
+            for edge_pair in list(combinations(edge_idx, 2)):
                 constraints.append(
-                    hinge_constraint.format(edge_idx[0] + 1,
+                    fixed_constraint.format(edge_pair[0] + 1,
                                             anchor[0], anchor[1], anchor[2],
-                                            edge_idx[1] + 1,
-                                            anchor[0], anchor[1], anchor[2],
-                                            hinge_axis[0], hinge_axis[1], hinge_axis[2],
-                                            -hinge_axis[0], -hinge_axis[1], -hinge_axis[2]
-                                            ))
-            else:
-                for edge_pair in list(combinations(edge_idx, 2)):
-                    constraints.append(
-                        fixed_constraint.format(edge_pair[0] + 1,
-                                                anchor[0], anchor[1], anchor[2],
-                                                edge_pair[1] + 1,
-                                                anchor[0], anchor[1], anchor[2]))
-        return constraints
+                                            edge_pair[1] + 1,
+                                            anchor[0], anchor[1], anchor[2]))
+    return constraints
+
 
 def export_to_rsc(shape, material_id, segment_id, segment_type, constraints):
     material = "".join([layer.format(', '.join(map(str, m_layer.tolist()))) + '\n' for m_layer in material_id])
@@ -62,6 +64,7 @@ def export_to_rsc(shape, material_id, segment_id, segment_type, constraints):
     is_rig = "".join([layer.format(', '.join(map(str, r_layer.tolist()))) + '\n' for r_layer in segment_type])
     constraints = "".join(constraints)
     return robot_rsc.format(shape, material, segment, is_rig, constraints)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -72,12 +75,18 @@ if __name__ == '__main__':
     parser.add_argument('--n_voxels', type=int, default=1e4)
     parser.add_argument('--bone_radius', type=int, default=2)
     args = parser.parse_args()
-    
+
     config_path = f"data/config/{args.filename}.rsc"
     bot = Robot(args.filename, args.n_voxels, args.bone_radius)
-    shape = shape_template.format(bot.voxels.shape[0], bot.voxels.shape[1], bot.voxels.shape[2])
-    material_id, segment_id, segment_type = generate_body(bot.voxels, bot.segments)
-    constraints = generate_constraints(bot.joint2bones, bot.joint_positions, bot.bones)
+
+    order = (2, 0, 1)
+    voxels = bot.voxels.transpose(*order)
+    segments = bot.segments.transpose(*order)
+    joint_pos = np.roll(bot.joint_positions, shift=1, axis=-1)
+    bones = np.roll(bot.bones, shift=1, axis=-1)
+    shape = shape_template.format(voxels.shape[0], voxels.shape[1], voxels.shape[2])
+    material_id, segment_id, segment_type = generate_body(voxels, segments)
+    constraints = generate_constraints(bot.joint2bones, joint_pos, bones)
     rsc = export_to_rsc(shape, material_id, segment_id, segment_type, constraints)
     with open(config_path, "w") as file:
         file.write(rsc)
