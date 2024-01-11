@@ -67,8 +67,25 @@ hinge_constraint = """
                 </RigidBodyB>
                 <HingeAAxis>{}, {}, {}</HingeAAxis>
                 <HingeBAxis>{}, {}, {}</HingeBAxis>
+                <HingeRotationSignalID>{}</HingeRotationSignalID>
             </Constraint>
 
+"""
+
+ball_and_socket_constraint = """
+            <Constraint>
+                <Type>BALL_AND_SOCKET_JOINT</Type>
+                <RigidBodyA>
+                    <BodyID>1</BodyID>
+                    <SegmentID>{}</SegmentID>
+                    <Anchor>{},{},{}</Anchor>
+                </RigidBodyA>
+                <RigidBodyB>
+                    <BodyID>1</BodyID>
+                    <SegmentID>{}</SegmentID>
+                    <Anchor>{},{},{}</Anchor>
+                </RigidBodyB>
+            </Constraint>
 """
 
 fixed_constraint = """

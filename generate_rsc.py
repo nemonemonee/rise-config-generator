@@ -26,36 +26,56 @@ def generate_body(voxels: object, segments: object, rigid_material: object = 2) 
     return material_matrix.astype(int), segment_matrix.astype(int), is_rigid.astype(int)
 
 
-def generate_constraints(joint2edges, joint_pos, edges):
+def generate_constraints(joint2edges, joint_pos, edges, segments, voxel_size):
     constraints = []
     for joint_idx, edge_idx in joint2edges.items():
         n_edges = len(edge_idx)
-        anchor = joint_pos[joint_idx]
-        if n_edges == 2:
-            v_edge_0 = np.array(edges[edge_idx[0]][1] - edges[edge_idx[0]][0])
-            v_edge_1 = np.array(edges[edge_idx[1]][1] - edges[edge_idx[1]][0])
-            hinge_axis = np.cross(v_edge_0, v_edge_1)
-            if np.any(np.isnan(hinge_axis)):
-                hinge_axis = np.array([1, 0, 0])
-            if np.linalg.norm(hinge_axis) != 0:
-                hinge_axis /= np.linalg.norm(hinge_axis)
 
-            constraints.append(
-                hinge_constraint.format(edge_idx[0] + 1,
-                                        anchor[0], anchor[1], anchor[2],
-                                        edge_idx[1] + 1,
-                                        anchor[0], anchor[1], anchor[2],
-                                        hinge_axis[0], hinge_axis[1], hinge_axis[2],
-                                        -hinge_axis[0], -hinge_axis[1], -hinge_axis[2]
-                                        ))
-        else:
-            for edge_pair in list(combinations(edge_idx, 2)):
-                constraints.append(
-                    fixed_constraint.format(edge_pair[0] + 1,
-                                            anchor[0], anchor[1], anchor[2],
-                                            edge_pair[1] + 1,
-                                            anchor[0], anchor[1], anchor[2]))
+        if n_edges == 2:
+            if np.sum(segments == edge_idx[0] + 1) > 0 and np.sum(segments == edge_idx[1] + 1) > 0:
+                anchor = joint_pos[joint_idx] * voxel_size
+                v_edge_0 = np.array(edges[edge_idx[0]][1] - edges[edge_idx[0]][0])
+                v_edge_1 = np.array(edges[edge_idx[1]][1] - edges[edge_idx[1]][0])
+                hinge_axis = np.cross(v_edge_0, v_edge_1)
+                # if np.any(np.isnan(hinge_axis)):
+                #     hinge_axis = np.array([1, 0, 0])
+                if np.linalg.norm(hinge_axis) != 0:
+                    hinge_axis /= np.linalg.norm(hinge_axis)
+                    constraints.append(
+                        hinge_constraint.format(edge_idx[0] + 1,
+                                                anchor[0], anchor[1], anchor[2],
+                                                edge_idx[1] + 1,
+                                                anchor[0], anchor[1], anchor[2],
+                                                hinge_axis[0], hinge_axis[1], hinge_axis[2],
+                                                -hinge_axis[0], -hinge_axis[1], -hinge_axis[2],
+                                                0
+                                                ))
+                else:
+                    constraints.append(
+                        ball_and_socket_constraint.format(edge_idx[0] + 1,
+                                                          anchor[0], anchor[1], anchor[2],
+                                                          edge_idx[1] + 1,
+                                                          anchor[0], anchor[1], anchor[2]))
     return constraints
+
+
+def many_bones_one_joint(joint2edges, segments):
+    e2seg = {}
+    for joint_idx, edge_idx in joint2edges.items():
+        n_edges = len(edge_idx)
+        if n_edges > 2:
+            segment_id = edge_idx[0] + 1
+            for i in edge_idx[1:]:
+                segments[segments == i + 1] = segment_id
+
+
+def fix_order(bot, shift=1):
+    joint_pos = np.roll(bot.joint_positions, shift=shift, axis=-1)
+    bones = np.roll(bot.bones, shift=shift, axis=-1)
+    order = tuple(np.roll([0, 1, 2], shift=shift))
+    voxels = bot.voxels.transpose(*order)
+    segments = bot.segments.transpose(*order)
+    return joint_pos, bones, voxels, segments
 
 
 def export_to_rsc(shape, material_id, segment_id, segment_type, constraints):
@@ -72,21 +92,19 @@ if __name__ == '__main__':
         description='Generate rise config file with given robot'
     )
     parser.add_argument('filename')
-    parser.add_argument('--n_voxels', type=int, default=1e4)
-    parser.add_argument('--bone_radius', type=int, default=2)
+    parser.add_argument('--n_voxels', type=int, default=2e4)
+    parser.add_argument('--bone_radius', type=int, default=1)
+    parser.add_argument('--shift', type=int, default=1)
     args = parser.parse_args()
 
     config_path = f"data/config/{args.filename}.rsc"
-    bot = Robot(args.filename, args.n_voxels, args.bone_radius)
 
-    order = (2, 0, 1)
-    voxels = bot.voxels.transpose(*order)
-    segments = bot.segments.transpose(*order)
-    joint_pos = np.roll(bot.joint_positions, shift=1, axis=-1)
-    bones = np.roll(bot.bones, shift=1, axis=-1)
+    voxel_size = 0.01
+    bot = Robot(args.filename, args.n_voxels, args.bone_radius)
+    joint_pos, bones, voxels, segments = fix_order(bot, args.shift)
     shape = shape_template.format(voxels.shape[0], voxels.shape[1], voxels.shape[2])
     material_id, segment_id, segment_type = generate_body(voxels, segments)
-    constraints = generate_constraints(bot.joint2bones, joint_pos, bones)
+    constraints = generate_constraints(bot.joint2bones, joint_pos, bones, segments, voxel_size)
     rsc = export_to_rsc(shape, material_id, segment_id, segment_type, constraints)
     with open(config_path, "w") as file:
         file.write(rsc)
