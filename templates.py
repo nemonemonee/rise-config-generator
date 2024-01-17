@@ -24,7 +24,7 @@ robot_rsc = """
     <Simulator>
         <Signal>
             <ExpansionNum>0</ExpansionNum>
-            <RotationNum>1</RotationNum>
+            <RotationNum>{}</RotationNum>
         </Signal>
         <RecordHistory>
             <RecordStepSize>200</RecordStepSize>

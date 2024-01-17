@@ -28,17 +28,15 @@ def generate_body(voxels: object, segments: object, rigid_material: object = 2) 
 
 def generate_constraints(joint2edges, joint_pos, edges, segments, voxel_size):
     constraints = []
+    rotation_idx = 0
     for joint_idx, edge_idx in joint2edges.items():
         n_edges = len(edge_idx)
-
         if n_edges == 2:
             if np.sum(segments == edge_idx[0] + 1) > 0 and np.sum(segments == edge_idx[1] + 1) > 0:
                 anchor = joint_pos[joint_idx] * voxel_size
                 v_edge_0 = np.array(edges[edge_idx[0]][1] - edges[edge_idx[0]][0])
                 v_edge_1 = np.array(edges[edge_idx[1]][1] - edges[edge_idx[1]][0])
                 hinge_axis = np.cross(v_edge_0, v_edge_1)
-                # if np.any(np.isnan(hinge_axis)):
-                #     hinge_axis = np.array([1, 0, 0])
                 if np.linalg.norm(hinge_axis) != 0:
                     hinge_axis /= np.linalg.norm(hinge_axis)
                     constraints.append(
@@ -48,15 +46,16 @@ def generate_constraints(joint2edges, joint_pos, edges, segments, voxel_size):
                                                 anchor[0], anchor[1], anchor[2],
                                                 hinge_axis[0], hinge_axis[1], hinge_axis[2],
                                                 -hinge_axis[0], -hinge_axis[1], -hinge_axis[2],
-                                                0
+                                                rotation_idx
                                                 ))
+                    rotation_idx += 1
                 else:
                     constraints.append(
                         ball_and_socket_constraint.format(edge_idx[0] + 1,
                                                           anchor[0], anchor[1], anchor[2],
                                                           edge_idx[1] + 1,
                                                           anchor[0], anchor[1], anchor[2]))
-    return constraints
+    return constraints, rotation_idx
 
 
 def many_bones_one_joint(joint2edges, segments):
@@ -78,12 +77,12 @@ def fix_order(bot, shift=1):
     return joint_pos, bones, voxels, segments
 
 
-def export_to_rsc(shape, material_id, segment_id, segment_type, constraints):
+def export_to_rsc(shape, material_id, segment_id, segment_type, constraints, num_rotation_signals):
     material = "".join([layer.format(', '.join(map(str, m_layer.tolist()))) + '\n' for m_layer in material_id])
     segment = "".join([layer.format(', '.join(map(str, s_layer.tolist()))) + '\n' for s_layer in segment_id])
     is_rig = "".join([layer.format(', '.join(map(str, r_layer.tolist()))) + '\n' for r_layer in segment_type])
     constraints = "".join(constraints)
-    return robot_rsc.format(shape, material, segment, is_rig, constraints)
+    return robot_rsc.format(shape, material, segment, is_rig, constraints, num_rotation_signals)
 
 
 if __name__ == '__main__':
@@ -104,7 +103,7 @@ if __name__ == '__main__':
     joint_pos, bones, voxels, segments = fix_order(bot, args.shift)
     shape = shape_template.format(voxels.shape[0], voxels.shape[1], voxels.shape[2])
     material_id, segment_id, segment_type = generate_body(voxels, segments)
-    constraints = generate_constraints(bot.joint2bones, joint_pos, bones, segments, voxel_size)
-    rsc = export_to_rsc(shape, material_id, segment_id, segment_type, constraints)
+    constraints, num_rotation_signals = generate_constraints(bot.joint2bones, joint_pos, bones, segments, voxel_size)
+    rsc = export_to_rsc(shape, material_id, segment_id, segment_type, constraints, num_rotation_signals)
     with open(config_path, "w") as file:
         file.write(rsc)
