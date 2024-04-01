@@ -15,6 +15,9 @@ robot_rsc = """
                 <SegmentType>
                     {}
                 </SegmentType>
+                <ExpansionSignalID>
+                    {}
+                </ExpansionSignalID>
             </Body>
         </Bodies>
         <Constraints>
@@ -23,8 +26,8 @@ robot_rsc = """
     </Structure>
     <Simulator>
         <Signal>
-            <ExpansionNum>0</ExpansionNum>
-            <RotationNum>1</RotationNum>
+            <ExpansionNum>{}</ExpansionNum>
+            <RotationNum>{}</RotationNum>
         </Signal>
         <RecordHistory>
             <RecordStepSize>200</RecordStepSize>
@@ -67,7 +70,6 @@ hinge_constraint = """
                 </RigidBodyB>
                 <HingeAAxis>{}, {}, {}</HingeAAxis>
                 <HingeBAxis>{}, {}, {}</HingeBAxis>
-                <HingeRotationSignalID>{}</HingeRotationSignalID>
             </Constraint>
 
 """

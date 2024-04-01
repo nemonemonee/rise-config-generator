@@ -1,8 +1,7 @@
 import argparse
 import numpy as np
-from itertools import combinations
-from templates import *
-from load_robot import Robot
+from src.templates import *
+from src.load_robot import Robot
 
 
 def generate_body(voxels: object, segments: object, rigid_material: object = 2) -> object:
