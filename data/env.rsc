@@ -1,4 +1,4 @@
-<VXC Version="0.1">
+<RSC Version="0.1">
     <Simulator>
         <Integration>
             <DtFrac>1</DtFrac>
@@ -80,4 +80,4 @@
             </Material>
         </Palette>
     </Voxel>
-</VXC>
+</RSC>

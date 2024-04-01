@@ -1,5 +1,5 @@
 robot_rsc = """
-<VXC>
+<RSC>
     <Structure>
         <Bodies>
             <Body ID="1">
@@ -43,9 +43,12 @@ robot_rsc = """
                 <Rescale>0.001</Rescale>
                 <Path>robot.history</Path>
             </Text>
+            <HDF5>
+                <Path>robot.h5_history</Path>
+            </HDF5>
         </Record>
     </Save>
-</VXC>
+</RSC>
 """
 
 shape_template = """

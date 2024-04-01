@@ -2,8 +2,8 @@ import numpy as np
 from pyquaternion import Quaternion
 from templates import robot_rsc, hinge_constraint, layer, shape_template
 import random
-from sim.env import RiseEnv
-
+# from sim.env import RiseEnv
+from rise import Rise, RiseFrame
 np.set_printoptions(suppress=True)
 
 
@@ -62,7 +62,7 @@ def decode_gene(params):
         soft_radius = 0.01 + 0.01 * param[2]
         ax = np.array(param[3:6]) * 2 - 1
         ax /= np.linalg.norm(ax)
-        rad = (0.5 + 0.5 * param[6]) * np.pi
+        rad = (0.25 + 0.25 * param[6]) * np.pi
         nodes_params.append((length, rigid_radius, soft_radius, ax, rad))
     temp = list(nodes_params[0])
     temp[0] = 0
@@ -82,7 +82,7 @@ def initialize_topology_tree(nodes, max_children):
     for node in nodes[1:]:
         if not available_parents:
             break
-        parent = random.choice(available_parents)
+        parent = np.random.choice(available_parents)
         parent.add_child(node)
         node.set_parent(parent)
         if len(parent.children) >= max_children:
@@ -115,14 +115,15 @@ def generate_body(voxels, segments, expansion, rigid_material=2):
     return material_matrix.astype(int), segment_matrix.astype(int), is_rigid.astype(int), expansion_matrix.astype(int)
 
 
-def add_constraint(constraints, anchor, segment_i, segment_j, hinge_axis):
+def add_constraint(constraints, anchor, segment_i, segment_j, hinge_axis, id):
     constraints.append(
         hinge_constraint.format(segment_i,
                                 anchor[0], anchor[1], anchor[2],
                                 segment_j,
                                 anchor[0], anchor[1], anchor[2],
                                 hinge_axis[0], hinge_axis[1], hinge_axis[2],
-                                -hinge_axis[0], -hinge_axis[1], -hinge_axis[2]
+                                -hinge_axis[0], -hinge_axis[1], -hinge_axis[2],
+                                id
                                 ))
 
 
@@ -197,8 +198,10 @@ def parse(node, up, start=None):
     if start is None:
         start = node.parent.end
     if node.length == 0:
-        end = start - up * node.rigid_radius
-        q = Quaternion()
+        q = Quaternion(axis=node.ax, angle=node.rad)
+        v = q.rotate(up)
+        end = start + v * node.rigid_radius
+        
     else:
         q = node.parent.world_quaternion
         q *= Quaternion(axis=node.ax, angle=node.rad)
@@ -222,20 +225,24 @@ def parse_topology_tree(root, root_position=np.array([0, 0, 0]), up=np.array([0,
         curr.set_id(segment_idx)
 
 
-def build(coords, voxels, segments, expansion, root, lb, dx, offset, root_position=np.array([0, 0, 0])):
+def build(coords, voxels, segments, expansion, root, lb, dx, offset, root_position=np.array([0, 0, 0]), up=np.array([0,0,1])):
     constraints = []
     start, end = coords_position(root_position, lb, dx, offset / 2), coords_position(root.end, lb, dx, offset / 2)
     bone_coords, musc_coords = add_one_component(coords, start, end, root, dx)
     update(voxels, segments, expansion, root.id, bone_coords, musc_coords)
     queue = []
     queue += root.children
+    rid = 0
     while len(queue) != 0:
         curr = queue.pop()
         queue += curr.children
         start, end = coords_position(curr.parent.end, lb, dx, offset / 2), coords_position(curr.end, lb, dx, offset / 2)
         bone_coords, musc_coords = add_one_component(coords, start, end, curr, dx)
         update(voxels, segments, expansion, curr.id, bone_coords, musc_coords)
-        add_constraint(constraints, start * dx, curr.parent.id, curr.id, curr.world_quaternion.rotate(curr.ax))
+        h_a = np.cross(curr.parent.world_quaternion.rotate(up), curr.world_quaternion.rotate(up))
+        h_a /= np.linalg.norm(h_a)
+        add_constraint(constraints, start * dx, curr.parent.id, curr.id, h_a, rid)
+        rid += 1
     return constraints
 
 
@@ -257,6 +264,7 @@ def initialize_matrices(joint_positions, root, dx=.01, offset=np.array([20, 20, 
 
 if __name__ == '__main__':
     num_nodes = 10
+    np.random.seed(111)
     params = np.random.rand(num_nodes, 7)
     nodes_params = decode_gene(params)
     nodes = [JointNode(*params) for params in nodes_params]
@@ -270,12 +278,29 @@ if __name__ == '__main__':
     shape = shape_template.format(size[0], size[1], size[2])
     material_id, segment_id, segment_type, expansion_sig = generate_body(voxels, segments, expansion)
     rsc = export_to_rsc(shape, material_id, segment_id, segment_type, expansion_sig, constraints,
-                        int(np.max(expansion)))
+                    int(np.max(expansion)))
     with open('../data/config/generated.rsc', 'w') as f:
         f.write(rsc)
 
     with open("../data/env.rsc", "r") as f:
         env_config = f.read()
+
+    rise = Rise(devices=[0])
+
+    configs = []
+    robot_configs = []
+
+    configs.append([env_config, rsc])
+    robot_configs.append(rsc)
+
+    result = rise.run_sims(
+        configs,
+        [],
+        record_buffer_size=1,
+        save_result=True,
+        save_record=True,
+        log_level="debug"
+    )
     #
     # env = RiseEnv(
     #     devices=[0],
