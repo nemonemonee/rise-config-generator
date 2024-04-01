@@ -55,8 +55,9 @@ class Robot:
         proj_ps = np.dot(proj_mat, (coords - bone[0]).T).T + bone[0]
         distance = np.linalg.norm(proj_ps - coords, axis=1)
         bone_length = np.linalg.norm(dir)
-        proj_dist = np.linalg.norm(proj_ps - bone[0].T, axis=1)
-        is_on_segment = np.logical_and(proj_dist > 0, proj_dist < bone_length)
+        proj_dist = np.linalg.norm(proj_ps - bone[0].T, axis=1) + \
+                    np.linalg.norm(proj_ps - bone[1].T, axis=1)
+        is_on_segment = np.isclose(proj_dist, bone_length, rtol=1e-6)
         return coords[np.logical_and(distance <= radius, is_on_segment)]
 
     def add_bones(self, voxels, segments, bones, radius, material=2):
