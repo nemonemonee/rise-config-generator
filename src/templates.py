@@ -73,6 +73,7 @@ hinge_constraint = """
                 </RigidBodyB>
                 <HingeAAxis>{}, {}, {}</HingeAAxis>
                 <HingeBAxis>{}, {}, {}</HingeBAxis>
+                <HingeRotationSignalID>{}</HingeRotationSignalID>
             </Constraint>
 
 """

@@ -1,7 +1,11 @@
 import numpy as np
 from pyquaternion import Quaternion
 from templates import robot_rsc, hinge_constraint, layer, shape_template
-import random
+import cma
+import copy
+import os
+import lxml
+import lxml.etree
 # from sim.env import RiseEnv
 from rise import Rise, RiseFrame
 np.set_printoptions(suppress=True)
@@ -261,9 +265,39 @@ def initialize_matrices(joint_positions, root, dx=.01, offset=np.array([20, 20, 
     constraints = build(coords, voxels, segments, expansion, root, lower_bd, dx, offset)
     return size, voxels, segments, expansion, constraints
 
+def _read_value(root, p, axis):
+    return float(root.xpath(f'//{p}_center_of_mass/{axis}/text()')[0])
+
+def _read_point(root, p):
+        return np.array([_read_value(root, p, 'x'),
+                         _read_value(root, p, 'y'),
+                         _read_value(root, p, 'z')])
+
+def evaluate(summary):
+    root = lxml.etree.fromstring(summary.encode())
+    start_com = _read_point(root, "start")
+    end_com = _read_point(root, "end")
+    displacement = end_com - start_com
+    return - displacement[0]
+
+def make_actuation(offset, n_signals):
+    def actuation(time, frame, expansion_signals, rotation_signals):
+        for i in range(n_signals):
+            expansion_signals[i] = 0
+            rotation_signals[i] = np.sin(time * 2 + offset[i])
+    return actuation
+
+def make_actuations(solutions, n_signals):
+    actuations = []
+    for i in range(len(solutions)):
+        offset = solutions[i]
+        actuations.append(make_actuation(offset, n_signals))
+    return actuations
 
 if __name__ == '__main__':
     num_nodes = 10
+    n_signals = num_nodes -1
+    popsize = 40
     np.random.seed(111)
     params = np.random.rand(num_nodes, 7)
     nodes_params = decode_gene(params)
@@ -285,41 +319,60 @@ if __name__ == '__main__':
     with open("../data/env.rsc", "r") as f:
         env_config = f.read()
 
-    rise = Rise(devices=[0])
+    rise = Rise(devices=[0,1,2,3])
 
     configs = []
     robot_configs = []
+    for i in range(popsize):
+        configs.append([env_config, rsc.replace("robot.result", f"../data/output/r_{i}.result").replace("robot.history", f"../data/output/r_{i}.history").replace("robot.h5_history", f"../data/output/r_{i}.h5_history")])
 
-    configs.append([env_config, rsc])
+    # configs.append([env_config, rsc])
     robot_configs.append(rsc)
-
-    result = rise.run_sims(
-        configs,
-        [],
-        record_buffer_size=1,
-        save_result=True,
-        save_record=True,
-        log_level="debug"
+    es = cma.CMAEvolutionStrategy(
+        [np.pi] * (num_nodes-1),
+        1,
+        {
+            "seed": 626,
+            "popsize": popsize,
+            "bounds": [
+                [0] * n_signals,
+                [2 * np.pi] * n_signals,
+            ],
+            "CMA_stds": [1] * n_signals,
+        },
     )
-    #
-    # env = RiseEnv(
-    #     devices=[0],
-    #     env_config=env_config,
-    #     voxel_size=0.01,
-    #     material_num=3,
-    #     material_is_rigid=segments == 2,
-    #     voxel_grid_size=size,
-    #     result_path="../data/result/generated.result",
-    #     record_path="../data/result/generated.history"
-    # )
-    #
-    # env.run_sims(
-    #     generation=0,
-    #     robots=,
-    #     controller = None,
-    #     builder_kwargs = None,
-    #     fitness_critique_observe_frames = 10,
-    #     fitness_critique_observe_interval= 0.1,
-    #     save_record = False,
-    #     record_buffer_size = 100,
-    # )
+    gen = 0
+    offset = np.random.rand(n_signals)
+    best_offset = copy.deepcopy(offset)
+    best = float('inf')
+    while not es.stop():
+        print(f"generation : {gen}")
+        solutions = es.ask()
+        actuations = make_actuations(solutions, n_signals)
+        result = rise.run_sims(
+            configs,
+            actuations,
+            record_buffer_size=1,
+            save_result=True,
+            save_record=True,
+            log_level="debug"
+        )
+        fitness = np.zeros(popsize)
+        for i in range(popsize):
+            if result[i]:
+                with open(f"../data/output/r_{i}.result", "r") as f:
+                    summary = f.read()
+                fitness[i] = evaluate(summary)
+        # print("fitness: ", fitness)
+        if np.min(fitness) < best:
+            best_index = np.argmin(fitness)
+            best = fitness[best_index]
+            best_offset = copy.deepcopy(solutions[best_index])
+            # print(best_offset)
+            os.rename(f"../data/output/r_{best_index}.history", f"../data/output/{gen}_{best:.2f}.history")
+        es.tell(solutions, fitness)
+        es.logger.add()
+        es.disp()
+        gen += 1
+
+    offset = best_offset
